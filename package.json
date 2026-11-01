@@ -1,0 +1,20 @@
+{
+  "name": "remoteforge",
+  "version": "0.1.0",
+  "description": "AI-native remote development & execution platform",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "node-pty": "^1.1.0",
+    "ws": "^8.22.1"
+  }
+}

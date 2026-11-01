@@ -1,0 +1,27 @@
+{
+  "name": "@remoteforge/cli",
+  "version": "0.1.0",
+  "description": "RemoteForge CLI",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "remoteforge": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@remoteforge/shared": "file:../shared",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "tsx": "^4.19.1",
+    "@types/node": "^24.0.0"
+  }
+}

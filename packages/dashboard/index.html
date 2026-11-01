@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RemoteForge Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+<style>
+  :root { --bg:#0b0d10; --panel:#12151a; --border:#1f242c; --text:#e6e9ef; --muted:#8a93a3; --accent:#4f8cff; --danger:#ff5c5c; --ok:#4ade80; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header h1 { margin:0; font-size:16px; letter-spacing:1px; }
+  .layout { display:grid; grid-template-columns:220px 1fr; min-height:calc(100vh - 52px); }
+  nav { border-right:1px solid var(--border); padding:10px; background:var(--panel); }
+  nav button { width:100%; text-align:left; padding:10px 12px; margin:4px 0; background:transparent; color:var(--text); border:1px solid transparent; border-radius:6px; cursor:pointer; font-family:inherit; }
+  nav button.active { background:#1a1f27; border-color:var(--border); }
+  main { padding:20px; overflow:auto; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:14px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { padding:8px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  input, select { background:#0e1116; color:var(--text); border:1px solid var(--border); border-radius:6px; padding:8px; font-family:inherit; }
+  button.action { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:6px 10px; cursor:pointer; font-family:inherit; font-size:12px; margin:2px; }
+  button.danger { background:var(--danger); }
+  button.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  #terminal { height:320px; }
+  .login { max-width:420px; margin:80px auto; }
+  .muted { color:var(--muted); font-size:12px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#1a1f27; border:1px solid var(--border); }
+  .ok { color:var(--ok); }
+  .err { color:var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <h1>RemoteForge</h1>
+  <div class="row">
+    <input id="serverUrl" placeholder="http://localhost:8787" style="width:240px" />
+    <input id="token" placeholder="admin token" style="width:260px" />
+    <button class="action" onclick="saveAuth()">Connect</button>
+    <span id="status" class="muted"></span>
+  </div>
+</header>
+<div class="layout">
+  <nav>
+    <button data-view="overview" class="active" onclick="show('overview')">Overview</button>
+    <button data-view="nodes" onclick="show('nodes')">VPS Nodes</button>
+    <button data-view="pairings" onclick="show('pairings')">Pairing Requests</button>
+    <button data-view="sessions" onclick="show('sessions')">Sessions</button>
+    <button data-view="workspaces" onclick="show('workspaces')">Workspaces</button>
+    <button data-view="jobs" onclick="show('jobs')">Jobs</button>
+    <button data-view="artifacts" onclick="show('artifacts')">Artifacts</button>
+    <button data-view="audit" onclick="show('audit')">Audit Log</button>
+    <button data-view="terminal" onclick="show('terminal')">Terminal</button>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script>
+const API = () => (localStorage.getItem('rf_server') || document.getElementById('serverUrl').value || 'http://localhost:8787').replace(/\/$/,'');
+const TOKEN = () => localStorage.getItem('rf_token') || document.getElementById('token').value || '';
+function saveAuth(){
+  localStorage.setItem('rf_server', document.getElementById('serverUrl').value);
+  localStorage.setItem('rf_token', document.getElementById('token').value);
+  document.getElementById('status').textContent = 'saved';
+  load();
+}
+async function api(method, path, body){
+  const r = await fetch(API()+path, { method, headers: {'Content-Type':'application/json','Authorization':'Bearer '+TOKEN()}, body: body?JSON.stringify(body):undefined });
+  const t = await r.text();
+  let data; try { data = JSON.parse(t); } catch { data = t; }
+  if(!r.ok) throw new Error(data?.message || r.status);
+  return data;
+}
+let currentView='overview';
+function show(v){ currentView=v; document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v)); render(); }
+async function render(){
+  const main=document.getElementById('main');
+  main.innerHTML='<div class="muted">Loading...</div>';
+  try {
+    switch(currentView){
+      case 'overview': await renderOverview(main); break;
+      case 'nodes': await renderNodes(main); break;
+      case 'pairings': await renderPairings(main); break;
+      case 'sessions': await renderSessions(main); break;
+      case 'workspaces': await renderWorkspaces(main); break;
+      case 'jobs': await renderJobs(main); break;
+      case 'artifacts': await renderArtifacts(main); break;
+      case 'audit': await renderAudit(main); break;
+      case 'terminal': renderTerminal(main); break;
+    }
+  } catch(e){ main.innerHTML='<div class="err">'+e.message+'</div>'; }
+}
+async function renderOverview(main){
+  const [nodes, sessions, jobs, ws] = await Promise.all([
+    api('GET','/api/nodes'), api('GET','/api/sessions'), api('GET','/api/jobs?limit=5'.replace('?limit=5','')).catch(()=>({items:[]})), api('GET','/api/workspaces')
+  ]);
+  main.innerHTML = `
+    <div class="card"><h2>Overview</h2>
+      <div class="row">
+        <div class="pill">Nodes: ${(nodes.items||nodes).length||0}</div>
+        <div class="pill">Sessions: ${(sessions.items||sessions).length||0}</div>
+        <div class="pill">Workspaces: ${(ws.items||ws).length||0}</div>
+      </div>
+      <p class="muted">Use nav to manage. API: ${API()}</p>
+    </div>`;
+}
+async function renderNodes(main){
+  const data = await api('GET','/api/nodes');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>VPS Nodes</h2><table><tr><th>ID</th><th>Name</th><th>Status</th><th>Last HB</th><th>Actions</th></tr>
+    ${items.map(n=>`<tr><td>${n.id}</td><td>${n.name}</td><td>${n.status}</td><td>${n.lastHeartbeatAt?new Date(n.lastHeartbeatAt).toLocaleTimeString():'-'}</td>
+      <td><button class="action danger" onclick="revokeNode('${n.id}')">Revoke</button></td></tr>`).join('')}
+  </table></div>`;
+}
+async function revokeNode(id){ if(!confirm('Revoke node?'))return; await api('POST','/api/nodes/'+id+'/revoke',{}); render(); }
+async function renderPairings(main){
+  const data = await api('GET','/api/pairing');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>Pending Pairings</h2><table><tr><th>ID</th><th>Code</th><th>Name</th><th>Status</th><th>Actions</th></tr>
+    ${items.map(p=>`<tr><td>${p.id}</td><td><b>${p.code}</b></td><td>${p.metadata?.name||''}</td><td>${p.status}</td>
+      <td><button class="action" onclick="approvePairing('${p.id}')">Approve</button><button class="action danger" onclick="rejectPairing('${p.id}')">Reject</button></td></tr>`).join('')}
+  </table></div>`;
+}
+async function approvePairing(id){ await api('POST','/api/pairing/'+id+'/approve',{}); render(); }
+async function rejectPairing(id){ await api('POST','/api/pairing/'+id+'/reject',{}); render(); }
+async function renderSessions(main){
+  const data = await api('GET','/api/sessions');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>Sessions</h2><table><tr><th>ID</th><th>Agent</th><th>Project</th><th>Status</th><th>Scopes</th><th>Actions</th></tr>
+    ${items.map(s=>`<tr><td>${s.id}</td><td>${s.agentIdentity}</td><td>${s.projectName||''}</td><td>${s.status}</td><td>${(s.requestedScopes||[]).join(',')}</td>
+      <td>${s.status==='pending'?`<button class="action" onclick="approveSession('${s.id}')">Approve</button><button class="action danger" onclick="rejectSession('${s.id}')">Reject</button>`:''}
+      ${s.status==='active'?`<button class="action danger" onclick="revokeSession('${s.id}')">Revoke</button>`:''}</td></tr>`).join('')}
+  </table></div>`;
+}
+async function approveSession(id){
+  const scopes = prompt('Approved scopes (comma):','workspace:read,command:run');
+  if(!scopes) return;
+  await api('POST','/api/sessions/'+id+'/approve',{approvedScopes: scopes.split(',').map(s=>s.trim())});
+  render();
+}
+async function rejectSession(id){ await api('POST','/api/sessions/'+id+'/reject',{}); render(); }
+async function revokeSession(id){ await api('POST','/api/sessions/'+id+'/revoke',{}); render(); }
+async function renderWorkspaces(main){
+  const data = await api('GET','/api/workspaces');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>Workspaces</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input id="wsNode" placeholder="nodeId" style="width:260px" />
+      <input id="wsName" placeholder="name" style="width:160px" />
+      <button class="action" onclick="createWs()">Create</button>
+    </div>
+    <table><tr><th>ID</th><th>Name</th><th>Node</th><th>Status</th><th>Path</th><th>Actions</th></tr>
+      ${items.map(w=>`<tr><td>${w.id}</td><td>${w.name}</td><td>${w.nodeId}</td><td>${w.status}</td><td style="font-size:10px">${w.path||''}</td>
+        <td><button class="action danger" onclick="destroyWs('${w.id}')">Destroy</button></td></tr>`).join('')}
+    </table></div>`;
+}
+async function createWs(){
+  const nodeId=document.getElementById('wsNode').value;
+  const name=document.getElementById('wsName').value;
+  await api('POST','/api/workspaces',{nodeId,name});
+  render();
+}
+async function destroyWs(id){ if(!confirm('Destroy?'))return; await api('DELETE','/api/workspaces/'+id); render(); }
+async function renderJobs(main){
+  const data = await api('GET','/api/jobs').catch(()=>({items:[]}));
+  // no list all endpoint? use audit? We'll show recent via workspaces jobs not available. Use /api/jobs/:id only. Show placeholder.
+  main.innerHTML = `<div class="card"><h2>Jobs</h2><p class="muted">Job status is returned when creating workspaces/commands. Enter job id to inspect.</p>
+    <div class="row"><input id="jobId" placeholder="job id" style="width:320px" /><button class="action" onclick="inspectJob()">Inspect</button></div>
+    <pre id="jobOut" class="muted" style="white-space:pre-wrap;margin-top:10px"></pre>
+  </div>`;
+}
+async function inspectJob(){
+  const id=document.getElementById('jobId').value;
+  const j=await api('GET','/api/jobs/'+id);
+  document.getElementById('jobOut').textContent=JSON.stringify(j,null,2);
+}
+async function renderArtifacts(main){
+  const data = await api('GET','/api/artifacts');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>Artifacts</h2><table><tr><th>ID</th><th>Filename</th><th>Size</th><th>Actions</th></tr>
+    ${items.map(a=>`<tr><td>${a.id}</td><td>${a.filename}</td><td>${a.size}</td><td><a href="${API()}/api/artifacts/${a.id}/download" target="_blank"><button class="action">Download</button></a></td></tr>`).join('')}
+  </table></div>`;
+}
+async function renderAudit(main){
+  const data = await api('GET','/api/audit?limit=100');
+  const items = data.items||data;
+  main.innerHTML = `<div class="card"><h2>Audit Log</h2><table><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr>
+    ${items.map(e=>`<tr><td>${new Date(e.createdAt).toLocaleTimeString()}</td><td>${e.actorType}</td><td>${e.action}</td><td>${e.targetType||''}:${e.targetId||''}</td></tr>`).join('')}
+  </table></div>`;
+}
+let termInstance=null, termWs=null;
+function renderTerminal(main){
+  main.innerHTML = `<div class="card"><h2>Terminal (xterm.js)</h2>
+    <div class="row" style="margin-bottom:8px">
+      <input id="termNode" placeholder="nodeId" style="width:260px" />
+      <input id="termWs" placeholder="workspaceId (optional)" style="width:260px" />
+      <button class="action" onclick="openTerminal()">Open</button>
+      <button class="action danger" onclick="closeTerminal()">Close</button>
+    </div>
+    <div id="terminal" style="height:400px"></div>
+  </div>`;
+  termInstance = new Terminal({ theme:{background:'#0b0d10'}, cursorBlink:true });
+  termInstance.open(document.getElementById('terminal'));
+  termInstance.onData(d => { if(termWs && termWs.readyState===1) termWs.send(JSON.stringify({type:'input',data:d})); });
+  termInstance.write('RemoteForge terminal ready. Open a session.\r\n');
+}
+async function openTerminal(){
+  const nodeId=document.getElementById('termNode').value;
+  const workspaceId=document.getElementById('termWs').value;
+  const res = await api('POST','/api/terminal/sessions',{nodeId, workspaceId: workspaceId||null});
+  const wsUrl = API().replace(/^http/,'ws')+res.wsUrl;
+  termWs = new WebSocket(wsUrl);
+  termWs.onopen = () => { termWs.send(JSON.stringify({type:'open',nodeId,workspaceId:workspaceId||null,cols:termInstance.cols,rows:termInstance.rows})); };
+  termWs.onmessage = (ev) => {
+    const m=JSON.parse(ev.data);
+    if(m.type==='output') termInstance.write(m.data);
+    else if(m.type==='exit') termInstance.write('\r\n[exit '+m.code+']\r\n');
+    else if(m.type==='error') termInstance.write('\r\n[error: '+m.message+']\r\n');
+  };
+  termWs.onclose = () => { termInstance.write('\r\n[connection closed]\r\n'); };
+}
+function closeTerminal(){ if(termWs) termWs.close(); }
+"
+window.show=show; window.saveAuth=saveAuth; window.render=render; window.openTerminal=openTerminal; window.closeTerminal=closeTerminal;
+window.revokeNode=revokeNode; window.approvePairing=approvePairing; window.rejectPairing=rejectPairing;
+window.approveSession=approveSession; window.rejectSession=rejectSession; window.revokeSession=revokeSession;
+window.createWs=createWs; window.destroyWs=destroyWs; window.inspectJob=inspectJob;
+document.getElementById('serverUrl').value = localStorage.getItem('rf_server')||'http://localhost:8787';
+document.getElementById('token').value = localStorage.getItem('rf_token')||'';
+load();
+function load(){ if(TOKEN()) render(); else document.getElementById('main').innerHTML='<div class="login card"><h2>Connect</h2><p class="muted">Enter server URL and admin token, then Connect.</p></div>'; }
+</script>
+</body>
+</html>
