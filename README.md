@@ -83,7 +83,14 @@ node packages/cli/dist/index.js pairing-approve <pairingId>
 node packages/agent/dist/index.js run
 ```
 
-### 5. Open the dashboard
+### 5. One-command agent setup (npx)
+```bash
+npx remoteforge setup
+```
+> Requires the package to be published (`npm publish` in `packages/remoteforge`). 
+> Until then, run locally: `node packages/remoteforge/lib/cli.js setup`
+
+### 6. Open the dashboard
 Open `packages/dashboard/index.html` in a browser and connect with your server URL + token.
 
 ---
