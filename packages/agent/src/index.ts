@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { loadConfig, saveConfig, defaultConfig } from "./config.js";
 import { connectTerminalWs } from "./terminal.js";
 import { AgentClient } from "./client.js";

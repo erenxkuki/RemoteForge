@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { Command } from "commander";
 import { loadConfig, saveConfig } from "./config.js";
 import { CliClient } from "./client.js";

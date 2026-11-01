@@ -1,7 +1,10 @@
 import * as readline from "node:readline";
 import { mkdirSync, writeFileSync, existsSync, readFileSync, cpSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const AGENTS = [
   { key: "opencode", name: "OpenCode", configPath: path.join(os.homedir(), ".config", "opencode", "opencode.json"), skillsDir: path.join(os.homedir(), ".config", "opencode", "skills") },
@@ -50,9 +53,16 @@ export async function runSetup() {
   const serverUrl = ask("RemoteForge server URL (default http://localhost:8787): ") || "http://localhost:8787";
   const token = ask("Session token (leave blank to configure later): ");
 
+  const mcpCandidates = [
+    path.resolve(__dirname, "mcp.js"),
+    path.resolve(__dirname, "..", "mcp-server", "dist", "index.js"),
+    path.resolve(process.cwd(), "packages", "mcp-server", "dist", "index.js"),
+    path.resolve(process.cwd(), "packages", "remoteforge", "dist", "mcp.js"),
+  ];
+  const mcpPath = mcpCandidates.find((p) => existsSync(p)) || mcpCandidates[0];
   const mcpEntry = {
     command: "node",
-    args: [path.resolve(process.cwd(), "packages/mcp-server/dist/index.js")],
+    args: [mcpPath],
     env: {
       REMOTE_FORGE_SERVER: serverUrl,
       REMOTE_FORGE_TOKEN: token || "<paste-session-token-here>",
@@ -90,7 +100,11 @@ export async function runSetup() {
 
     // Install skills
     if (agent.skillsDir) {
-      const skillSrc = path.resolve(process.cwd(), "skills", agent.key === "claude" ? "claude-code" : agent.key);
+      const skillCandidates = [
+        path.resolve(__dirname, "..", "skills", agent.key === "claude" ? "claude-code" : agent.key),
+        path.resolve(process.cwd(), "skills", agent.key === "claude" ? "claude-code" : agent.key),
+      ];
+      const skillSrc = skillCandidates.find((p) => existsSync(p)) || skillCandidates[0];
       if (existsSync(skillSrc)) {
         mkdirSync(agent.skillsDir, { recursive: true });
         try { cpSync(skillSrc, path.join(agent.skillsDir, "remoteforge"), { recursive: true }); console.log(`Installed skills to ${agent.skillsDir}`); } catch (e) { console.log("Skill install skipped:", (e as Error).message); }
