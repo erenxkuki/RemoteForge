@@ -2,9 +2,17 @@
 import { Command } from "commander";
 import { loadConfig, saveConfig } from "./config.js";
 import { CliClient } from "./client.js";
+import { runSetup } from "./setup.js";
 
 const program = new Command();
 program.name("remoteforge").description("RemoteForge CLI").version("0.1.0");
+
+program
+  .command("setup")
+  .description("Interactive setup: configure your AI coding agent for RemoteForge")
+  .action(async () => {
+    await runSetup();
+  });
 
 function serverUrlOverride(opts: any): string | undefined {
   return opts.server;
