@@ -1,5 +1,5 @@
 {
-  "name": "remoteforge",
+  "name": "@realryzu/remoteforge",
   "version": "0.1.0",
   "description": "RemoteForge CLI + MCP server + skills (self-contained)",
   "type": "module",
@@ -9,10 +9,13 @@
     "remoteforge-mcp": "./lib/mcp.js",
     "remoteforge-setup": "./lib/cli.js"
   },
-  "files": ["lib", "skills"],
+  "files": [
+    "lib",
+    "skills"
+  ],
   "scripts": {
     "build": "node scripts/build.cjs",
-    "setup": "node dist/cli.js setup"
+    "setup": "node lib/cli.js setup"
   },
   "dependencies": {
     "commander": "^12.1.0",
@@ -21,5 +24,7 @@
     "ws": "^8.18.0"
   },
   "license": "MIT",
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
