@@ -49,6 +49,11 @@ if (fs.existsSync(skillsDst)) fs.rmSync(skillsDst, { recursive: true, force: tru
 fs.cpSync(skillsSrc, skillsDst, { recursive: true });
 console.log("Copied skills");
 
+// Copy top-level bin entries (npm requires bin files at package root)
+fs.copyFileSync(path.join(outDir, "cli.js"), path.join(__dirname, "..", "cli.js"));
+fs.copyFileSync(path.join(outDir, "mcp.js"), path.join(__dirname, "..", "mcp.js"));
+console.log("Copied top-level bin");
+
 // Copy build (chmod)
 try { fs.chmodSync(path.join(outDir, "cli.js"), 0o755); fs.chmodSync(path.join(outDir, "mcp.js"), 0o755); } catch {}
 console.log("Done");

@@ -1,16 +1,18 @@
 {
-  "name": "@realryzu/remoteforge",
-  "version": "0.1.0",
+  "name": "remote-forge-cli",
+  "version": "0.1.1",
   "description": "RemoteForge CLI + MCP server + skills (self-contained)",
   "type": "module",
-  "main": "./lib/cli.js",
+  "main": "./cli.js",
   "bin": {
-    "remoteforge": "./lib/cli.js",
-    "remoteforge-mcp": "./lib/mcp.js",
-    "remoteforge-setup": "./lib/cli.js"
+    "remoteforge": "cli.js",
+    "remote-forge-cli": "cli.js",
+    "remoteforge-mcp": "mcp.js",
+    "remoteforge-setup": "cli.js"
   },
   "files": [
-    "lib",
+    "cli.js",
+    "mcp.js",
     "skills"
   ],
   "scripts": {
