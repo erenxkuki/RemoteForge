@@ -4,9 +4,9 @@
 > Run builds, tests, and commands on a VPS while your local AI agent stays in control.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/Node-24+-green.svg)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org)
-[![Status](https://img.shields.io/badge/Status-Phases%201--6%20Complete-brightgreen.svg)]()
+[![Node](https://img.shields.io/badge/Node-20+-green.svg)](https://nodejs.org)
+[![npm](https://img.shields.io/npm/v/remote-forge-cli.svg)](https://www.npmjs.com/package/remote-forge-cli)
+[![Status](https://img.shields.io/badge/Status-Complete-brightgreen.svg)]()
 
 ---
 
@@ -18,6 +18,7 @@
 - 🤖 **MCP server** — first-class AI agent integration (OpenCode, Codex, Claude Code)
 - 🖥️ **Interactive terminal** — xterm.js over WebSocket PTY
 - 📊 **Web dashboard** — dark, minimal, developer-focused
+- ⚡ **One-line install** — for both client and VPS
 
 ---
 
@@ -46,14 +47,15 @@
 | `packages/cli` | Operator CLI |
 | `packages/mcp-server` | MCP server for AI agents |
 | `packages/dashboard` | Web dashboard (xterm.js) |
+| `packages/remoteforge` | Self-contained npm package (npx-ready) |
 | `skills/` | Agent skills (OpenCode, Codex, Claude Code, generic) |
-| `docs/` | Architecture, security model, MCP config, agent skill |
+| `docs/` | Architecture, security model, MCP config, guide |
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Install
+### 1. Install (client/control machine)
 ```bash
 git clone https://github.com/erenxkuki/RemoteForge.git
 cd RemoteForge
@@ -61,56 +63,55 @@ npm install --ignore-scripts
 npm run build
 ```
 
-### 2. Run the server
+Or via npx (no clone):
 ```bash
+npx remote-forge-cli setup
+```
+
+### 2. Start the server
+```bash
+# Linux/macOS
 REMOTE_FORGE_DB=./remoteforge.db node packages/server/dist/index.js
+
+# Windows (cmd)
+set REMOTE_FORGE_DB=./remoteforge.db
+node packages/server/dist/index.js
 ```
 
 ### 3. Bootstrap admin
 ```bash
-node packages/cli/dist/index.js bootstrap -u admin -p password123
-node packages/cli/dist/index.js login -u admin -p password123
+node packages/cli/dist/index.js bootstrap -u admin -p yourpassword
+node packages/cli/dist/index.js login -u admin -p yourpassword
 ```
 
-### 4. Connect a VPS (no separate install needed)
+### 4. Connect a VPS
+
+**One-line installer (Linux):**
 ```bash
-# On the VPS — pair via npx (Node.js 20+ required)
-npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
-
-# Approve from the server/control side
-remoteforge pairings
-remoteforge pairing-approve <pairingId>
-
-# Start the daemon (keeps running)
-npx remote-forge-cli agent run
-
-# Or install a one-line shell installer
 curl -fsSL https://raw.githubusercontent.com/erenxkuki/RemoteForge/main/packages/remoteforge/install.sh | bash
 ```
-# Approve from the server side
-node packages/cli/dist/index.js pairings
-node packages/cli/dist/index.js pairing-approve <pairingId>
-# Start the daemon
-node packages/agent/dist/index.js run
+
+**One-line installer (Windows PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/erenxkuki/RemoteForge/main/packages/remoteforge/install.ps1 | iex
+```
+
+**Or via npx (no install needed):**
+```bash
+npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
+# Approve from server side:
+remoteforge pairings && remoteforge pairing-approve <id>
+# Start daemon:
+npx remote-forge-cli agent run
 ```
 
 ### 5. One-command agent setup (npx)
 ```bash
 npx remote-forge-cli setup
 ```
-Selects your agent (OpenCode, Codex, Claude Code, Cursor, Windsurf, Cline), writes MCP config, and installs skills.
+Selects your agent, writes MCP config, installs skills.
 
-### 6. Connect a VPS (no separate install needed)
-```bash
-# On the VPS
-npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
-# Approve from server side
-remoteforge pairings && remoteforge pairing-approve <id>
-# Start daemon
-npx remote-forge-cli agent run
-```
-
-### 7. Open the dashboard
+### 6. Open the dashboard
 Open `packages/dashboard/index.html` in a browser and connect with your server URL + token.
 
 ---
@@ -131,15 +132,15 @@ See [`docs/security-model.md`](docs/security-model.md).
 
 See [`docs/mcp-config.md`](docs/mcp-config.md) for OpenCode / Codex / Claude Code setup.
 
-Skills are available under [`skills/`](skills/).
+Skills are available under [`skills/`](skills/) and installed via `npx remote-forge-cli setup`.
 
 ---
 
 ## 🧪 Tests
 
 ```bash
-npm test            # all workspaces
-npm run test --workspace packages/server   # server integration tests
+npm test                          # all workspaces
+npm run test --workspace packages/server   # server integration (6 tests)
 ```
 
 ---
