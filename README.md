@@ -72,13 +72,20 @@ node packages/cli/dist/index.js bootstrap -u admin -p password123
 node packages/cli/dist/index.js login -u admin -p password123
 ```
 
-### 4. Install agent on VPS (one command)
+### 4. Connect a VPS (no separate install needed)
 ```bash
-# On the VPS — installs Node if needed + agent
-curl -fsSL https://raw.githubusercontent.com/erenxkuki/RemoteForge/main/packages/remoteforge/install.sh | bash
-
-# Or via npx (agent is included in the package)
+# On the VPS — pair via npx (Node.js 20+ required)
 npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
+
+# Approve from the server/control side
+remoteforge pairings
+remoteforge pairing-approve <pairingId>
+
+# Start the daemon (keeps running)
+npx remote-forge-cli agent run
+
+# Or install a one-line shell installer
+curl -fsSL https://raw.githubusercontent.com/erenxkuki/RemoteForge/main/packages/remoteforge/install.sh | bash
 ```
 # Approve from the server side
 node packages/cli/dist/index.js pairings
@@ -89,12 +96,21 @@ node packages/agent/dist/index.js run
 
 ### 5. One-command agent setup (npx)
 ```bash
-npx remoteforge setup
+npx remote-forge-cli setup
 ```
-> Requires the package to be published (`npm publish` in `packages/remoteforge`). 
-> Until then, run locally: `node packages/remoteforge/lib/cli.js setup`
+Selects your agent (OpenCode, Codex, Claude Code, Cursor, Windsurf, Cline), writes MCP config, and installs skills.
 
-### 6. Open the dashboard
+### 6. Connect a VPS (no separate install needed)
+```bash
+# On the VPS
+npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
+# Approve from server side
+remoteforge pairings && remoteforge pairing-approve <id>
+# Start daemon
+npx remote-forge-cli agent run
+```
+
+### 7. Open the dashboard
 Open `packages/dashboard/index.html` in a browser and connect with your server URL + token.
 
 ---
