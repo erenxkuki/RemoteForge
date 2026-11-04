@@ -59,31 +59,77 @@ var CliClient = class {
 };
 
 // ../cli/src/setup.ts
-import * as readline from "node:readline";
-import { mkdirSync, writeFileSync, existsSync, readFileSync, cpSync } from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
 import os2 from "node:os";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, cpSync, rmSync } from "node:fs";
+import * as readline from "node:readline";
 var __dirname = path2.dirname(fileURLToPath(import.meta.url));
+var c = {
+  reset: "\x1B[0m",
+  bold: "\x1B[1m",
+  dim: "\x1B[2m",
+  red: "\x1B[31m",
+  green: "\x1B[32m",
+  yellow: "\x1B[33m",
+  blue: "\x1B[34m",
+  magenta: "\x1B[35m",
+  cyan: "\x1B[36m",
+  white: "\x1B[37m",
+  bgBlue: "\x1B[44m"
+};
+function color(text, ...codes) {
+  return codes.join("") + text + c.reset;
+}
+function success(text) {
+  return color("\u2714 " + text, c.green, c.bold);
+}
+function fail(text) {
+  return color("\u2716 " + text, c.red, c.bold);
+}
+function info(text) {
+  return color("\u2139 " + text, c.cyan);
+}
+function warn(text) {
+  return color("\u26A0 " + text, c.yellow);
+}
+function header(text) {
+  return color(text, c.bold, c.magenta);
+}
+function spinner(text) {
+  const frames = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+  let i = 0;
+  const interval = setInterval(() => {
+    process.stdout.write(`\r${color(frames[i++ % frames.length], c.cyan)} ${text}`);
+  }, 80);
+  return {
+    stop: (msg) => {
+      clearInterval(interval);
+      process.stdout.write(`\r${" ".repeat(text.length + 4)}\r`);
+      if (msg) console.log(msg);
+    }
+  };
+}
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 var AGENTS = [
-  { key: "opencode", name: "OpenCode", configPath: path2.join(os2.homedir(), ".config", "opencode", "opencode.json"), skillsDir: path2.join(os2.homedir(), ".config", "opencode", "skills") },
-  { key: "codex", name: "Codex", configPath: path2.join(os2.homedir(), ".codex", "config.toml"), skillsDir: path2.join(os2.homedir(), ".codex", "skills") },
-  { key: "claude", name: "Claude Code", configPath: path2.join(os2.homedir(), ".claude", "settings.json"), skillsDir: path2.join(os2.homedir(), ".claude", "skills") },
-  { key: "cursor", name: "Cursor", configPath: path2.join(os2.homedir(), ".cursor", "mcp.json"), skillsDir: null },
-  { key: "windsurf", name: "Windsurf", configPath: path2.join(os2.homedir(), ".codeium", "windsurf", "mcp_config.json"), skillsDir: null },
-  { key: "cline", name: "Cline", configPath: path2.join(os2.homedir(), ".cline", "mcp_settings.json"), skillsDir: null }
+  { key: "opencode", name: "OpenCode", configPath: path2.join(os2.homedir(), ".config", "opencode", "opencode.json"), skillsDir: path2.join(os2.homedir(), ".config", "opencode", "skills"), skillFolder: "opencode" },
+  { key: "codex", name: "Codex", configPath: path2.join(os2.homedir(), ".codex", "config.toml"), skillsDir: path2.join(os2.homedir(), ".codex", "skills"), skillFolder: "codex" },
+  { key: "claude", name: "Claude Code", configPath: path2.join(os2.homedir(), ".claude", "settings.json"), skillsDir: path2.join(os2.homedir(), ".claude", "skills"), skillFolder: "claude-code" },
+  { key: "cursor", name: "Cursor", configPath: path2.join(os2.homedir(), ".cursor", "mcp.json"), skillsDir: null, skillFolder: null },
+  { key: "windsurf", name: "Windsurf", configPath: path2.join(os2.homedir(), ".codeium", "windsurf", "mcp_config.json"), skillsDir: null, skillFolder: null },
+  { key: "cline", name: "Cline", configPath: path2.join(os2.homedir(), ".cline", "mcp_settings.json"), skillsDir: null, skillFolder: null }
 ];
-var rlInstance = null;
+function detectAgents() {
+  return AGENTS.filter((a) => existsSync(path2.dirname(a.configPath)));
+}
 var inputLines = [];
-var inputReady = false;
 function initInput() {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin });
     rl.on("line", (line) => inputLines.push(line));
-    rl.on("close", () => {
-      inputReady = true;
-      resolve();
-    });
+    rl.on("close", () => resolve());
   });
 }
 var lineIndex = 0;
@@ -92,31 +138,53 @@ function ask(q) {
   const ans = lineIndex < inputLines.length ? inputLines[lineIndex++] : "";
   return ans.trim();
 }
-function closeRl() {
-  if (rlInstance) {
-    rlInstance.close();
-    rlInstance = null;
-  }
-}
-async function runSetup() {
-  await initInput();
-  console.log("\n=== RemoteForge Setup ===\n");
-  console.log("Which AI coding agent are you using?\n");
-  AGENTS.forEach((a, i) => console.log(`  ${i + 1}. ${a.name}`));
-  console.log(`  ${AGENTS.length + 1}. Other / manual
-`);
-  const choice = ask("Enter number: ");
-  const idx = parseInt(choice, 10) - 1;
-  const agent = idx >= 0 && idx < AGENTS.length ? AGENTS[idx] : null;
-  const serverUrl = ask("RemoteForge server URL (default http://localhost:8787): ") || "http://localhost:8787";
-  const token = ask("Session token (leave blank to configure later): ");
-  const mcpCandidates = [
+function resolveMcpPath() {
+  const candidates = [
     path2.resolve(__dirname, "mcp.js"),
     path2.resolve(__dirname, "..", "mcp-server", "dist", "index.js"),
     path2.resolve(process.cwd(), "packages", "mcp-server", "dist", "index.js"),
-    path2.resolve(process.cwd(), "packages", "remoteforge", "dist", "mcp.js")
+    path2.resolve(process.cwd(), "packages", "remoteforge", "mcp.js")
   ];
-  const mcpPath = mcpCandidates.find((p) => existsSync(p)) || mcpCandidates[0];
+  return candidates.find((p) => existsSync(p)) || candidates[0];
+}
+function resolveSkillSrc(folder) {
+  const candidates = [
+    path2.resolve(__dirname, "..", "skills", folder),
+    path2.resolve(process.cwd(), "skills", folder)
+  ];
+  return candidates.find((p) => existsSync(p)) || candidates[0];
+}
+async function runSetup() {
+  await initInput();
+  console.log();
+  console.log(color("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557", c.magenta, c.bold));
+  console.log(color("\u2551     RemoteForge Interactive Setup     \u2551", c.magenta, c.bold));
+  console.log(color("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D", c.magenta, c.bold));
+  console.log();
+  const detected = detectAgents();
+  if (detected.length > 0) {
+    console.log(info(`Detected installed agents: ${detected.map((a) => a.name).join(", ")}`));
+    console.log();
+  }
+  console.log(header("Which AI coding agent are you using?\n"));
+  AGENTS.forEach((a, i) => {
+    const det = detected.includes(a) ? color(" (detected)", c.green) : "";
+    console.log(`  ${color(String(i + 1), c.cyan, c.bold)}. ${a.name}${det}`);
+  });
+  console.log(`  ${color(String(AGENTS.length + 1), c.cyan, c.bold)}. Other / manual
+`);
+  const choice = ask(color("Enter number: ", c.yellow));
+  const idx = parseInt(choice, 10) - 1;
+  const agent = idx >= 0 && idx < AGENTS.length ? AGENTS[idx] : null;
+  if (!agent) {
+    console.log(warn("Manual setup: see docs/mcp-config.md"));
+    return;
+  }
+  const sp = spinner(`Configuring ${agent.name}...`);
+  await sleep(300);
+  const serverUrl = ask(color("RemoteForge server URL (default http://localhost:8787): ", c.yellow)) || "http://localhost:8787";
+  const token = ask(color("Session token (leave blank to configure later): ", c.yellow));
+  const mcpPath = resolveMcpPath();
   const mcpEntry = {
     command: "node",
     args: [mcpPath],
@@ -125,28 +193,17 @@ async function runSetup() {
       REMOTE_FORGE_TOKEN: token || "<paste-session-token-here>"
     }
   };
-  if (agent) {
-    mkdirSync(path2.dirname(agent.configPath), { recursive: true });
-    let cfg = {};
-    if (existsSync(agent.configPath)) {
-      try {
-        cfg = JSON.parse(readFileSync(agent.configPath, "utf8"));
-      } catch {
-        cfg = {};
-      }
+  mkdirSync(path2.dirname(agent.configPath), { recursive: true });
+  let cfg = {};
+  if (existsSync(agent.configPath)) {
+    try {
+      cfg = JSON.parse(readFileSync(agent.configPath, "utf8"));
+    } catch {
+      cfg = {};
     }
-    if (agent.key === "opencode") {
-      cfg.mcp = cfg.mcp || {};
-      cfg.mcp.servers = cfg.mcp.servers || {};
-      cfg.mcp.servers.remoteforge = mcpEntry;
-    } else if (agent.key === "claude") {
-      cfg.mcpServers = cfg.mcpServers || {};
-      cfg.mcpServers.remoteforge = mcpEntry;
-    } else if (agent.key === "cursor" || agent.key === "windsurf" || agent.key === "cline") {
-      cfg.mcpServers = cfg.mcpServers || {};
-      cfg.mcpServers.remoteforge = mcpEntry;
-    } else if (agent.key === "codex") {
-      const toml = `# RemoteForge
+  }
+  if (agent.key === "codex") {
+    const toml = `# RemoteForge
 [mcp_servers.remoteforge]
 command = "node"
 args = [${mcpEntry.args.map((a) => `"${a}"`).join(", ")}]
@@ -155,42 +212,46 @@ args = [${mcpEntry.args.map((a) => `"${a}"`).join(", ")}]
 REMOTE_FORGE_SERVER = "${serverUrl}"
 REMOTE_FORGE_TOKEN = "${token || "<paste-session-token-here>"}"
 `;
-      writeFileSync(agent.configPath, toml);
-      console.log(`
-Wrote Codex config to ${agent.configPath}`);
-    }
-    if (agent.key !== "codex") {
-      writeFileSync(agent.configPath, JSON.stringify(cfg, null, 2));
-      console.log(`
-Wrote MCP config to ${agent.configPath}`);
-    }
-    if (agent.skillsDir) {
-      const skillCandidates = [
-        path2.resolve(__dirname, "..", "skills", agent.key === "claude" ? "claude-code" : agent.key),
-        path2.resolve(process.cwd(), "skills", agent.key === "claude" ? "claude-code" : agent.key)
-      ];
-      const skillSrc = skillCandidates.find((p) => existsSync(p)) || skillCandidates[0];
-      if (existsSync(skillSrc)) {
-        mkdirSync(agent.skillsDir, { recursive: true });
-        try {
-          cpSync(skillSrc, path2.join(agent.skillsDir, "remoteforge"), { recursive: true });
-          console.log(`Installed skills to ${agent.skillsDir}`);
-        } catch (e) {
-          console.log("Skill install skipped:", e.message);
-        }
-      }
-    }
+    writeFileSync(agent.configPath, toml);
+  } else if (agent.key === "opencode") {
+    cfg.mcp = cfg.mcp || {};
+    cfg.mcp.servers = cfg.mcp.servers || {};
+    cfg.mcp.servers.remoteforge = mcpEntry;
+    writeFileSync(agent.configPath, JSON.stringify(cfg, null, 2));
   } else {
-    console.log("\nManual setup: see docs/mcp-config.md");
+    cfg.mcpServers = cfg.mcpServers || {};
+    cfg.mcpServers.remoteforge = mcpEntry;
+    writeFileSync(agent.configPath, JSON.stringify(cfg, null, 2));
   }
-  console.log("\nNext steps:");
-  console.log("  1. Start the server:  REMOTE_FORGE_DB=./remoteforge.db node packages/server/dist/index.js");
-  console.log("  2. Bootstrap admin:   remoteforge bootstrap -u admin -p <password>");
-  console.log("  3. Pair a VPS:        remoteforge-agent pair --server <url> --name myvps");
-  console.log("  4. Request a session via your agent's remoteforge_request_session tool");
-  console.log("  5. Approve in dashboard/CLI, then claim the session token");
-  closeRl();
-  console.log("\nDone!\n");
+  sp.stop(success(`MCP config written to ${agent.configPath}`));
+  if (agent.skillsDir && agent.skillFolder) {
+    const skillSrc = resolveSkillSrc(agent.skillFolder === "claude-code" ? "claude-code" : agent.skillFolder);
+    if (existsSync(skillSrc)) {
+      const sp2 = spinner(`Installing skills for ${agent.name}...`);
+      await sleep(200);
+      mkdirSync(agent.skillsDir, { recursive: true });
+      const dest = path2.join(agent.skillsDir, "remoteforge");
+      if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+      try {
+        cpSync(skillSrc, dest, { recursive: true });
+        sp2.stop(success(`Skills installed to ${dest}`));
+      } catch (e) {
+        sp2.stop(fail(`Skill install failed: ${e.message}`));
+      }
+    } else {
+      console.log(warn(`Skill source not found: ${skillSrc}`));
+    }
+  }
+  console.log();
+  console.log(header("Next steps:"));
+  console.log(`  ${color("1.", c.cyan)} Start the server:  ${color("REMOTE_FORGE_DB=./remoteforge.db node packages/server/dist/index.js", c.dim)}`);
+  console.log(`  ${color("2.", c.cyan)} Bootstrap admin:   ${color("remoteforge bootstrap -u admin -p <password>", c.dim)}`);
+  console.log(`  ${color("3.", c.cyan)} Pair a VPS:        ${color("npx remote-forge-cli agent pair --server <url> --name myvps", c.dim)}`);
+  console.log(`  ${color("4.", c.cyan)} Request a session via your agent's ${color("remoteforge_request_session", c.yellow)} tool`);
+  console.log(`  ${color("5.", c.cyan)} Approve in dashboard/CLI, then claim the session token`);
+  console.log();
+  console.log(success("Setup complete! Restart your AI agent to load the new MCP server."));
+  console.log();
 }
 
 // ../cli/src/index.ts
