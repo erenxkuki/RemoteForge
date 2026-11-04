@@ -146,6 +146,7 @@ npm run test --workspace packages/server   # server integration tests
 
 ## 📚 Documentation
 
+- [Complete Guide](docs/GUIDE.md)
 - [Architecture](docs/architecture.md)
 - [Security Model](docs/security-model.md)
 - [MCP Config](docs/mcp-config.md)
