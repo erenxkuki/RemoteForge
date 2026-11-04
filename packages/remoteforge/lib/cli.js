@@ -195,7 +195,7 @@ Wrote MCP config to ${agent.configPath}`);
 
 // ../cli/src/index.ts
 var program = new Command();
-program.name("remoteforge").description("RemoteForge CLI").version("0.1.0");
+program.name("remoteforge").description("RemoteForge CLI").version("0.1.4");
 program.command("setup").description("Interactive setup: configure your AI coding agent for RemoteForge").action(async () => {
   await runSetup();
 });

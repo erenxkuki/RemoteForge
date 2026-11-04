@@ -4,7 +4,7 @@ import { CliClient } from "./client.js";
 import { runSetup } from "./setup.js";
 
 const program = new Command();
-program.name("remoteforge").description("RemoteForge CLI").version("0.1.0");
+program.name("remoteforge").description("RemoteForge CLI").version("0.1.4");
 
 program
   .command("setup")
