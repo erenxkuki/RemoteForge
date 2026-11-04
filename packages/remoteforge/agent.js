@@ -26,7 +26,8 @@ import { createRequire } from "node:module";
 var requireFn = createRequire(import.meta.url);
 var pty = null;
 try {
-  pty = requireFn("node-pty");
+  const modName = "node-pty";
+  pty = requireFn(modName);
 } catch (e) {
   console.warn("node-pty not available; terminal features disabled:", e?.message);
 }
