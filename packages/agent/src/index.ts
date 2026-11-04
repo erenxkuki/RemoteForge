@@ -123,11 +123,24 @@ async function handleJob(client: AgentClient, cfg: any, job: any): Promise<void>
         break;
       }
       case "start_process": {
-        const child = spawn(payload.command, payload.args || [], { cwd: payload.cwd ? safePath(wsPath, payload.cwd) : wsPath, env: { ...process.env, ...(payload.env || {}) }, detached: true, stdio: "ignore" });
-        child.unref();
-        const pid = child.pid!;
-        processes.set(pid, child);
-        result = { pid };
+        // Fully detached daemon: nohup + disown so it survives agent restart
+        const cmdStr = [payload.command, ...(payload.args || [])].map((a: string) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+        const cwd = payload.cwd ? safePath(wsPath, payload.cwd) : wsPath;
+        const logFile = path.join(os.tmpdir(), `rf-proc-${job.id}.log`);
+        const pidFile = path.join(os.tmpdir(), `rf-proc-${job.id}.pid`);
+        const envStr = Object.entries(payload.env || {}).map(([k,v]) => `${k}='${String(v).replace(/'/g,"'\\''")}'`).join(" ");
+        const fullCmd = `cd '${cwd.replace(/'/g,"'\\''")}' && ${envStr ? envStr + " " : ""}nohup ${cmdStr} > '${logFile}' 2>&1 & echo $! > '${pidFile}' && disown`;
+        const r = spawnSync("bash", ["-c", fullCmd], { encoding: "utf8", timeout: 5000 });
+        // read pid
+        let pid: number | null = null;
+        try { pid = parseInt(readFileSync(pidFile, "utf8").trim(), 10); } catch {}
+        if (!pid || isNaN(pid)) {
+          // fallback: direct spawn detached
+          const child = spawn(payload.command, payload.args || [], { cwd, env: { ...process.env, ...(payload.env || {}) }, detached: true, stdio: "ignore" });
+          child.unref();
+          pid = child.pid!;
+        }
+        result = { pid, logFile, persistent: true };
         break;
       }
       case "stop_process": {

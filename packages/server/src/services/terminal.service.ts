@@ -51,11 +51,8 @@ export class TerminalService {
       ws.on("message", (data) => this.handleClientMessage(sessionId, data));
       ws.on("close", () => {
         this.clients.delete(sessionId);
-        const nodeId = this.sessionNode.get(sessionId);
-        if (nodeId) {
-          const agent = this.agents.get(nodeId);
-          agent?.ws.send(JSON.stringify({ type: "close", sessionId }));
-        }
+        // Do NOT kill the agent-side PTY — it persists for reconnection.
+        // The terminal session remains alive on the VPS.
       });
       // request open from agent if not already
       return;

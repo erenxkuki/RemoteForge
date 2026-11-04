@@ -1,6 +1,6 @@
 {
   "name": "remote-forge-cli",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "RemoteForge CLI + MCP server + skills (self-contained)",
   "type": "module",
   "main": "./cli.js",

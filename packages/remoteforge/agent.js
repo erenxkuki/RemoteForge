@@ -31,12 +31,10 @@ try {
 } catch (e) {
   console.warn("node-pty not available; terminal features disabled:", e?.message);
 }
-function connectTerminalWs(serverUrl, nodeId, token, onOpen) {
+var persistentTerms = /* @__PURE__ */ new Map();
+function connectTerminalWs(serverUrl, nodeId, token) {
   const wsUrl = serverUrl.replace(/^http/, "ws").replace(/\/$/, "") + `/ws/agent?token=${encodeURIComponent(token)}&nodeId=${encodeURIComponent(nodeId)}`;
   const ws = new WebSocket(wsUrl);
-  const ptys = /* @__PURE__ */ new Map();
-  ws.on("open", () => {
-  });
   ws.on("message", (data) => {
     let msg;
     try {
@@ -45,7 +43,17 @@ function connectTerminalWs(serverUrl, nodeId, token, onOpen) {
       return;
     }
     if (msg.type === "open") {
-      const { sessionId, cols, rows, workspaceId, cwd } = msg;
+      const { sessionId, cols, rows } = msg;
+      let pt = persistentTerms.get(sessionId);
+      if (pt) {
+        pt.clients.add(ws);
+        ws.send(JSON.stringify({ type: "output", sessionId, data: pt.buffer }));
+        try {
+          pt.term.resize(cols || 80, rows || 24);
+        } catch (e) {
+        }
+        return;
+      }
       if (!pty) {
         ws.send(JSON.stringify({ type: "error", sessionId, message: "node-pty not available on this VPS" }));
         return;
@@ -55,42 +63,52 @@ function connectTerminalWs(serverUrl, nodeId, token, onOpen) {
         name: "xterm-256color",
         cols: cols || 80,
         rows: rows || 24,
-        cwd: cwd || process.cwd(),
+        cwd: process.cwd(),
         env: process.env
       });
-      ptys.set(sessionId, term);
+      const newPt = { term, buffer: "", clients: /* @__PURE__ */ new Set([ws]) };
+      persistentTerms.set(sessionId, newPt);
       term.onData((d) => {
-        ws.send(JSON.stringify({ type: "output", sessionId, data: d }));
+        newPt.buffer += d;
+        if (newPt.buffer.length > 65536) newPt.buffer = newPt.buffer.slice(-65536);
+        for (const c of newPt.clients) {
+          try {
+            c.send(JSON.stringify({ type: "output", sessionId, data: d }));
+          } catch (e) {
+          }
+        }
       });
       term.onExit(({ exitCode }) => {
-        ws.send(JSON.stringify({ type: "exit", sessionId, code: exitCode }));
-        ptys.delete(sessionId);
+        for (const c of newPt.clients) {
+          try {
+            c.send(JSON.stringify({ type: "exit", sessionId, code: exitCode }));
+          } catch (e) {
+          }
+        }
+        persistentTerms.delete(sessionId);
       });
-      onOpen?.(sessionId, cols, rows, cwd);
     } else if (msg.type === "input") {
-      const t = ptys.get(msg.sessionId);
-      t?.write(msg.data);
+      const pt = persistentTerms.get(msg.sessionId);
+      pt?.term.write(msg.data);
     } else if (msg.type === "resize") {
-      const t = ptys.get(msg.sessionId);
+      const pt = persistentTerms.get(msg.sessionId);
       try {
-        t?.resize(msg.cols, msg.rows);
-      } catch {
+        pt?.term.resize(msg.cols, msg.rows);
+      } catch (e) {
       }
     } else if (msg.type === "close") {
-      const t = ptys.get(msg.sessionId);
+      const pt = persistentTerms.get(msg.sessionId);
       try {
-        t?.kill();
-      } catch {
+        pt?.term.kill();
+      } catch (e) {
       }
-      ptys.delete(msg.sessionId);
+      persistentTerms.delete(msg.sessionId);
     }
   });
   ws.on("close", () => {
-    for (const [, t] of ptys) try {
-      t.kill();
-    } catch {
+    for (const pt of persistentTerms.values()) {
+      pt.clients.delete(ws);
     }
-    ptys.clear();
   });
   return ws;
 }
@@ -258,7 +276,6 @@ async function pair() {
   console.error("\nTimed out waiting for approval.");
   process.exit(1);
 }
-var processes = /* @__PURE__ */ new Map();
 async function handleJob(client, cfg, job) {
   const log = (c) => {
     client.request("POST", `/api/jobs/${job.id}/log`, { chunk: c }).catch(() => {
@@ -318,11 +335,24 @@ async function handleJob(client, cfg, job) {
         break;
       }
       case "start_process": {
-        const child = spawn2(payload.command, payload.args || [], { cwd: payload.cwd ? safePath(wsPath, payload.cwd) : wsPath, env: { ...process.env, ...payload.env || {} }, detached: true, stdio: "ignore" });
-        child.unref();
-        const pid = child.pid;
-        processes.set(pid, child);
-        result = { pid };
+        const cmdStr = [payload.command, ...payload.args || []].map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+        const cwd = payload.cwd ? safePath(wsPath, payload.cwd) : wsPath;
+        const logFile = path3.join(os4.tmpdir(), `rf-proc-${job.id}.log`);
+        const pidFile = path3.join(os4.tmpdir(), `rf-proc-${job.id}.pid`);
+        const envStr = Object.entries(payload.env || {}).map(([k, v]) => `${k}='${String(v).replace(/'/g, "'\\''")}'`).join(" ");
+        const fullCmd = `cd '${cwd.replace(/'/g, "'\\''")}' && ${envStr ? envStr + " " : ""}nohup ${cmdStr} > '${logFile}' 2>&1 & echo $! > '${pidFile}' && disown`;
+        const r = spawnSync2("bash", ["-c", fullCmd], { encoding: "utf8", timeout: 5e3 });
+        let pid = null;
+        try {
+          pid = parseInt(readFileSync2(pidFile, "utf8").trim(), 10);
+        } catch {
+        }
+        if (!pid || isNaN(pid)) {
+          const child = spawn2(payload.command, payload.args || [], { cwd, env: { ...process.env, ...payload.env || {} }, detached: true, stdio: "ignore" });
+          child.unref();
+          pid = child.pid;
+        }
+        result = { pid, logFile, persistent: true };
         break;
       }
       case "stop_process": {
