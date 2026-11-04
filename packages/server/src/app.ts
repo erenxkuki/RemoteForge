@@ -729,6 +729,51 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return { job: j };
   });
 
+  // ---- Tmux routes ----
+  const tmuxJob = async (req: any, reply: any, type: string, schema: any, auth: any, ws: any) => {
+    if (auth.kind !== "admin" && auth.kind !== "session") { reply.code(403).send({ code: "FORBIDDEN", message: "Forbidden" }); return; }
+    if (auth.kind === "session" && !auth.scopes.includes("command:run")) { reply.code(403).send({ code: "FORBIDDEN", message: "Missing scope: command:run" }); return; }
+    if (!ws) { reply.code(404).send({ code: "NOT_FOUND", message: "Workspace not found" }); return; }
+    const body = (req.body ?? {}) as any;
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) { reply.code(400).send({ code: "VALIDATION", message: "Invalid input", details: parsed.error.flatten() }); return; }
+    const j = job.create({ nodeId: ws.nodeId, workspaceId: ws.id, type: type as any, payload: parsed.data, requestedBy: auth.kind === "admin" ? auth.userId : null });
+    return { job: j };
+  };
+
+  app.post("/api/workspaces/:id/tmux/create", { preHandler: authenticate }, async (req, reply) => {
+    const a = (req as any).auth;
+    const ws = workspace.get((req.params as any).id);
+    const { TmuxCreateSchema } = await import("@remoteforge/shared");
+    return tmuxJob(req, reply, "tmux_create", TmuxCreateSchema, a, ws);
+  });
+  app.post("/api/workspaces/:id/tmux/send", { preHandler: authenticate }, async (req, reply) => {
+    const a = (req as any).auth;
+    const ws = workspace.get((req.params as any).id);
+    const { TmuxSendSchema } = await import("@remoteforge/shared");
+    return tmuxJob(req, reply, "tmux_send", TmuxSendSchema, a, ws);
+  });
+  app.post("/api/workspaces/:id/tmux/capture", { preHandler: authenticate }, async (req, reply) => {
+    const a = (req as any).auth;
+    const ws = workspace.get((req.params as any).id);
+    const { TmuxCaptureSchema } = await import("@remoteforge/shared");
+    return tmuxJob(req, reply, "tmux_capture", TmuxCaptureSchema, a, ws);
+  });
+  app.post("/api/workspaces/:id/tmux/list", { preHandler: authenticate }, async (req, reply) => {
+    const a = (req as any).auth;
+    const ws = workspace.get((req.params as any).id);
+    if (a.kind !== "admin" && a.kind !== "session") { reply.code(403).send({ code: "FORBIDDEN", message: "Forbidden" }); return; }
+    if (!ws) { reply.code(404).send({ code: "NOT_FOUND", message: "Workspace not found" }); return; }
+    const j = job.create({ nodeId: ws.nodeId, workspaceId: ws.id, type: "tmux_list" as any, payload: {}, requestedBy: a.kind === "admin" ? a.userId : null });
+    return { job: j };
+  });
+  app.post("/api/workspaces/:id/tmux/kill", { preHandler: authenticate }, async (req, reply) => {
+    const a = (req as any).auth;
+    const ws = workspace.get((req.params as any).id);
+    const { TmuxKillSchema } = await import("@remoteforge/shared");
+    return tmuxJob(req, reply, "tmux_kill", TmuxKillSchema, a, ws);
+  });
+
   // ---- Terminal session creation ----
   app.post("/api/terminal/sessions", { preHandler: authenticate }, async (req, reply) => {
     const a = (req as any).auth;

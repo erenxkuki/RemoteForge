@@ -1,7 +1,7 @@
 {
   "name": "remote-forge-cli",
-  "version": "0.1.8",
-  "description": "RemoteForge CLI + MCP server + skills (self-contained)",
+  "version": "1.0.1",
+  "description": "RemoteForge — AI-native remote development platform. One-command setup, VPS agent, MCP server, interactive CLI, and skills for OpenCode, Codex, and Claude Code.",
   "type": "module",
   "main": "./cli.js",
   "bin": {

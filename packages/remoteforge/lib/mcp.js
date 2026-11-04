@@ -152,5 +152,30 @@ server.tool("remoteforge_download_artifact", "Download an artifact as base64", {
   const buf = Buffer.from(await res.arrayBuffer());
   return text(JSON.stringify({ artifactId, size: buf.length, content: buf.toString("base64") }, null, 2));
 });
+server.tool("remoteforge_tmux_create", "Create a persistent tmux session on the VPS", { workspaceId: z.string(), sessionName: z.string(), command: z.string().optional(), args: z.array(z.string()).optional(), cwd: z.string().optional() }, async (args) => {
+  const res = await client.request("POST", `/api/workspaces/${args.workspaceId}/tmux/create`, args);
+  const job = await client.pollJob(res.job.id);
+  return text(JSON.stringify(job.result, null, 2));
+});
+server.tool("remoteforge_tmux_send", "Send keys to a tmux session", { workspaceId: z.string(), sessionName: z.string(), keys: z.string() }, async (args) => {
+  const res = await client.request("POST", `/api/workspaces/${args.workspaceId}/tmux/send`, args);
+  const job = await client.pollJob(res.job.id);
+  return text(JSON.stringify(job.result, null, 2));
+});
+server.tool("remoteforge_tmux_capture", "Capture output from a tmux session", { workspaceId: z.string(), sessionName: z.string(), lines: z.number().optional() }, async (args) => {
+  const res = await client.request("POST", `/api/workspaces/${args.workspaceId}/tmux/capture`, args);
+  const job = await client.pollJob(res.job.id);
+  return text(JSON.stringify(job.result, null, 2));
+});
+server.tool("remoteforge_tmux_list", "List tmux sessions on the VPS", { workspaceId: z.string() }, async ({ workspaceId }) => {
+  const res = await client.request("POST", `/api/workspaces/${workspaceId}/tmux/list`, {});
+  const job = await client.pollJob(res.job.id);
+  return text(JSON.stringify(job.result, null, 2));
+});
+server.tool("remoteforge_tmux_kill", "Kill a tmux session", { workspaceId: z.string(), sessionName: z.string() }, async (args) => {
+  const res = await client.request("POST", `/api/workspaces/${args.workspaceId}/tmux/kill`, args);
+  const job = await client.pollJob(res.job.id);
+  return text(JSON.stringify(job.result, null, 2));
+});
 var transport = new StdioServerTransport();
 await server.connect(transport);

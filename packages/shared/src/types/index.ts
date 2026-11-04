@@ -137,7 +137,12 @@ export type JobType =
   | "build"
   | "collect_artifacts"
   | "upload_project"
-  | "download_project";
+  | "download_project"
+  | "tmux_create"
+  | "tmux_send"
+  | "tmux_capture"
+  | "tmux_list"
+  | "tmux_kill";
 
 export type JobStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled" | "timeout";
 

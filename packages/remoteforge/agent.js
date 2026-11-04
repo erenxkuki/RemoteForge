@@ -447,6 +447,49 @@ async function handleJob(client, cfg, job) {
         result = { artifactId: uploadRes.artifactId, size: buf.length };
         break;
       }
+      case "tmux_create": {
+        const name = payload.sessionName;
+        const cmd2 = payload.command || "bash";
+        const args2 = payload.args || [];
+        const cwd = payload.cwd ? safePath(wsPath, payload.cwd) : wsPath;
+        spawnSync2("tmux", ["kill-session", "-t", name], { encoding: "utf8" });
+        const fullCmd = args2.length ? `${cmd2} ${args2.join(" ")}` : cmd2;
+        const r = spawnSync2("tmux", ["new-session", "-d", "-s", name, "-c", cwd, fullCmd], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux new-session failed");
+        result = { sessionName: name, created: true, cwd };
+        break;
+      }
+      case "tmux_send": {
+        const name = payload.sessionName;
+        const r = spawnSync2("tmux", ["send-keys", "-t", name, payload.keys, "Enter"], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux send-keys failed");
+        result = { sessionName: name, sent: true };
+        break;
+      }
+      case "tmux_capture": {
+        const name = payload.sessionName;
+        const lines = payload.lines || 100;
+        const r = spawnSync2("tmux", ["capture-pane", "-t", name, "-p", "-S", `-${lines}`], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux capture-pane failed");
+        result = { sessionName: name, output: r.stdout };
+        break;
+      }
+      case "tmux_list": {
+        const r = spawnSync2("tmux", ["list-sessions", "-F", "#{session_name}:#{session_created}:#{session_attached}"], { encoding: "utf8" });
+        const sessions = (r.stdout || "").trim().split("\n").filter(Boolean).map((line) => {
+          const [name, created, attached] = line.split(":");
+          return { name, created: Number(created), attached: attached === "1" };
+        });
+        result = { sessions };
+        break;
+      }
+      case "tmux_kill": {
+        const name = payload.sessionName;
+        const r = spawnSync2("tmux", ["kill-session", "-t", name], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux kill-session failed");
+        result = { sessionName: name, killed: true };
+        break;
+      }
       default:
         throw new Error(`Unknown job type: ${job.type}`);
     }
@@ -465,8 +508,7 @@ async function runDaemon() {
   const client = new AgentClient(cfg.serverUrl, cfg.nodeToken);
   console.log("Starting RemoteForge agent for node", cfg.nodeId);
   ensureDir(WORKSPACE_BASE);
-  connectTerminalWs(cfg.serverUrl, cfg.nodeId, cfg.nodeToken, () => {
-  });
+  connectTerminalWs(cfg.serverUrl, cfg.nodeId, cfg.nodeToken);
   const heartbeat = async () => {
     try {
       await client.request("POST", `/api/nodes/${cfg.nodeId}/heartbeat`, { status: "online" });

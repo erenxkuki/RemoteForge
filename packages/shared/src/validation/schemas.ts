@@ -104,3 +104,25 @@ export const BuildSchema = z.object({
   args: z.array(z.string()).optional().default([]),
   timeoutMs: z.number().int().min(1000).max(7200000).optional(),
 });
+
+// Tmux
+export const TmuxCreateSchema = z.object({
+  sessionName: z.string().min(1).max(64),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional().default([]),
+  cwd: z.string().optional(),
+});
+
+export const TmuxSendSchema = z.object({
+  sessionName: z.string().min(1).max(64),
+  keys: z.string(),
+});
+
+export const TmuxCaptureSchema = z.object({
+  sessionName: z.string().min(1).max(64),
+  lines: z.number().int().min(1).max(10000).optional().default(100),
+});
+
+export const TmuxKillSchema = z.object({
+  sessionName: z.string().min(1).max(64),
+});

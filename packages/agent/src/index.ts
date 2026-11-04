@@ -221,7 +221,6 @@ async function handleJob(client: AgentClient, cfg: any, job: any): Promise<void>
         break;
       }
       case "download_project": {
-        // tar workspace and upload as artifact
         const tarName = `project-${job.id}.tar.gz`;
         const tarPath = path.join(WORKSPACE_BASE, tarName);
         const r = spawnSync("tar", ["-czf", tarPath, "-C", wsPath, "."], { encoding: "utf8" });
@@ -230,6 +229,50 @@ async function handleJob(client: AgentClient, cfg: any, job: any): Promise<void>
         const uploadRes = await client.request("POST", `/api/workspaces/${job.workspaceId}/artifacts`, { filename: tarName, content: buf.toString("base64") });
         rmSync(tarPath, { force: true });
         result = { artifactId: uploadRes.artifactId, size: buf.length };
+        break;
+      }
+      case "tmux_create": {
+        const name = payload.sessionName;
+        const cmd = payload.command || "bash";
+        const args = payload.args || [];
+        const cwd = payload.cwd ? safePath(wsPath, payload.cwd) : wsPath;
+        // kill existing session with same name
+        spawnSync("tmux", ["kill-session", "-t", name], { encoding: "utf8" });
+        const fullCmd = args.length ? `${cmd} ${args.join(" ")}` : cmd;
+        const r = spawnSync("tmux", ["new-session", "-d", "-s", name, "-c", cwd, fullCmd], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux new-session failed");
+        result = { sessionName: name, created: true, cwd };
+        break;
+      }
+      case "tmux_send": {
+        const name = payload.sessionName;
+        const r = spawnSync("tmux", ["send-keys", "-t", name, payload.keys, "Enter"], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux send-keys failed");
+        result = { sessionName: name, sent: true };
+        break;
+      }
+      case "tmux_capture": {
+        const name = payload.sessionName;
+        const lines = payload.lines || 100;
+        const r = spawnSync("tmux", ["capture-pane", "-t", name, "-p", "-S", `-${lines}`], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux capture-pane failed");
+        result = { sessionName: name, output: r.stdout };
+        break;
+      }
+      case "tmux_list": {
+        const r = spawnSync("tmux", ["list-sessions", "-F", "#{session_name}:#{session_created}:#{session_attached}"], { encoding: "utf8" });
+        const sessions = (r.stdout || "").trim().split("\n").filter(Boolean).map((line: string) => {
+          const [name, created, attached] = line.split(":");
+          return { name, created: Number(created), attached: attached === "1" };
+        });
+        result = { sessions };
+        break;
+      }
+      case "tmux_kill": {
+        const name = payload.sessionName;
+        const r = spawnSync("tmux", ["kill-session", "-t", name], { encoding: "utf8" });
+        if (r.status !== 0) throw new Error(r.stderr || "tmux kill-session failed");
+        result = { sessionName: name, killed: true };
         break;
       }
       default:
@@ -254,7 +297,7 @@ async function runDaemon() {
   ensureDir(WORKSPACE_BASE);
 
   // terminal websocket
-  connectTerminalWs(cfg.serverUrl, cfg.nodeId, cfg.nodeToken, () => {});
+  connectTerminalWs(cfg.serverUrl, cfg.nodeId, cfg.nodeToken);
 
   const heartbeat = async () => {
     try { await client.request("POST", `/api/nodes/${cfg.nodeId}/heartbeat`, { status: "online" }); }
