@@ -1,6 +1,14 @@
 import WebSocket from "ws";
-import * as pty from "node-pty";
 import os from "node:os";
+
+import { createRequire } from "node:module";
+const requireFn = createRequire(import.meta.url);
+let pty: any = null;
+try {
+  pty = requireFn("node-pty");
+} catch (e) {
+  console.warn("node-pty not available; terminal features disabled:", (e as any)?.message);
+}
 
 export function connectTerminalWs(serverUrl: string, nodeId: string, token: string, onOpen: (sessionId: string, cols: number, rows: number, cwd: string | null) => void) {
   const wsUrl = serverUrl.replace(/^http/, "ws").replace(/\/$/, "") + `/ws/agent?token=${encodeURIComponent(token)}&nodeId=${encodeURIComponent(nodeId)}`;
@@ -13,6 +21,10 @@ export function connectTerminalWs(serverUrl: string, nodeId: string, token: stri
     try { msg = JSON.parse(data.toString()); } catch { return; }
     if (msg.type === "open") {
       const { sessionId, cols, rows, workspaceId, cwd } = msg;
+      if (!pty) {
+        ws.send(JSON.stringify({ type: "error", sessionId, message: "node-pty not available on this VPS" }));
+        return;
+      }
       const shell = os.platform() === "win32" ? "powershell.exe" : "bash";
       const term = pty.spawn(shell, [], {
         name: "xterm-256color",
