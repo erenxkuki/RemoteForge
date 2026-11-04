@@ -2,6 +2,11 @@ import { Command } from "commander";
 import { loadConfig, saveConfig } from "./config.js";
 import { CliClient } from "./client.js";
 import { runSetup } from "./setup.js";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const program = new Command();
 program.name("remoteforge").description("RemoteForge CLI").version("0.1.4");
@@ -11,6 +16,27 @@ program
   .description("Interactive setup: configure your AI coding agent for RemoteForge")
   .action(async () => {
     await runSetup();
+  });
+
+// Agent subcommand (delegates to bundled agent)
+program
+  .command("agent")
+  .description("Run the RemoteForge VPS agent (pair, run, status)")
+  .allowUnknownOption(true)
+  .argument("[args...]")
+  .action((args) => {
+    const agentCandidates = [
+      path.resolve(__dirname, "agent.js"),
+      path.resolve(__dirname, "..", "agent", "dist", "index.js"),
+      path.resolve(process.cwd(), "packages", "agent", "dist", "index.js"),
+    ];
+    const agentPath = agentCandidates.find((p) => { try { fs.accessSync(p); return true; } catch { return false; } });
+    if (!agentPath) {
+      console.error("Agent binary not found. Run from repo root or install the full package.");
+      process.exit(1);
+    }
+    const child = spawn("node", [agentPath, ...args], { stdio: "inherit" });
+    child.on("exit", (code) => process.exit(code ?? 0));
   });
 
 function serverUrlOverride(opts: any): string | undefined {

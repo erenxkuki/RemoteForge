@@ -1,6 +1,6 @@
 {
   "name": "remote-forge-cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "RemoteForge CLI + MCP server + skills (self-contained)",
   "type": "module",
   "main": "./cli.js",
@@ -8,13 +8,16 @@
     "remoteforge": "cli.js",
     "remote-forge-cli": "cli.js",
     "remoteforge-mcp": "mcp.js",
-    "remoteforge-setup": "cli.js"
+    "remoteforge-setup": "cli.js",
+    "remoteforge-agent": "agent.js"
   },
   "files": [
     "cli.js",
     "mcp.js",
+    "agent.js",
     "skills",
-    "README.md"
+    "README.md",
+    "install.sh"
   ],
   "scripts": {
     "build": "node scripts/build.cjs",

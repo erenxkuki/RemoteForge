@@ -27,6 +27,23 @@ esbuild.buildSync({
 });
 console.log("Bundled cli.js");
 
+// Bundle Agent
+esbuild.buildSync({
+  entryPoints: [path.join(root, "packages", "agent", "src", "index.ts")],
+  bundle: true,
+  packages: "external",
+  platform: "node",
+  target: "node20",
+  outfile: path.join(outDir, "agent.js"),
+  format: "esm",
+  resolveExtensions: [".ts", ".js"],
+  tsconfig: path.join(root, "packages", "agent", "tsconfig.json"),
+  banner: { js: "#!/usr/bin/env node" },
+  nodePaths: [path.join(root, "node_modules")],
+});
+fs.copyFileSync(path.join(outDir, "agent.js"), path.join(__dirname, "..", "agent.js"));
+console.log("Bundled agent.js");
+
 // Bundle MCP server
 esbuild.buildSync({
   entryPoints: [path.join(root, "packages", "mcp-server", "src", "index.ts")],

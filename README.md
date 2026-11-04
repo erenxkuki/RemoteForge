@@ -72,10 +72,14 @@ node packages/cli/dist/index.js bootstrap -u admin -p password123
 node packages/cli/dist/index.js login -u admin -p password123
 ```
 
-### 4. Pair a VPS
+### 4. Install agent on VPS (one command)
 ```bash
-# On the VPS
-node packages/agent/dist/index.js pair --server http://<server>:8787 --name myvps
+# On the VPS — installs Node if needed + agent
+curl -fsSL https://raw.githubusercontent.com/erenxkuki/RemoteForge/main/packages/remoteforge/install.sh | bash
+
+# Or via npx (agent is included in the package)
+npx remote-forge-cli agent pair --server http://<server>:8787 --name myvps
+```
 # Approve from the server side
 node packages/cli/dist/index.js pairings
 node packages/cli/dist/index.js pairing-approve <pairingId>

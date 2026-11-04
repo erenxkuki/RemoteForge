@@ -38,8 +38,8 @@ var CliClient = class {
     if (this.token) h.Authorization = `Bearer ${this.token}`;
     return h;
   }
-  async request(method, path3, body) {
-    const url = this.serverUrl.replace(/\/$/, "") + path3;
+  async request(method, path4, body) {
+    const url = this.serverUrl.replace(/\/$/, "") + path4;
     const res = await fetch(url, { method, headers: this.headers(), body: body !== void 0 ? JSON.stringify(body) : void 0 });
     const text = await res.text();
     let data = null;
@@ -194,10 +194,36 @@ Wrote MCP config to ${agent.configPath}`);
 }
 
 // ../cli/src/index.ts
+import { spawn } from "node:child_process";
+import path3 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import fs from "node:fs";
+var __dirname2 = path3.dirname(fileURLToPath2(import.meta.url));
 var program = new Command();
 program.name("remoteforge").description("RemoteForge CLI").version("0.1.4");
 program.command("setup").description("Interactive setup: configure your AI coding agent for RemoteForge").action(async () => {
   await runSetup();
+});
+program.command("agent").description("Run the RemoteForge VPS agent (pair, run, status)").allowUnknownOption(true).argument("[args...]").action((args) => {
+  const agentCandidates = [
+    path3.resolve(__dirname2, "agent.js"),
+    path3.resolve(__dirname2, "..", "agent", "dist", "index.js"),
+    path3.resolve(process.cwd(), "packages", "agent", "dist", "index.js")
+  ];
+  const agentPath = agentCandidates.find((p) => {
+    try {
+      fs.accessSync(p);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!agentPath) {
+    console.error("Agent binary not found. Run from repo root or install the full package.");
+    process.exit(1);
+  }
+  const child = spawn("node", [agentPath, ...args], { stdio: "inherit" });
+  child.on("exit", (code) => process.exit(code ?? 0));
 });
 program.command("config").description("Show CLI config").action(async () => {
   const cfg = await loadConfig();
