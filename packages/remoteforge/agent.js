@@ -21,8 +21,15 @@ async function saveConfig(cfg) {
 
 // ../agent/src/terminal.ts
 import WebSocket from "ws";
-import * as pty from "node-pty";
 import os2 from "node:os";
+import { createRequire } from "node:module";
+var requireFn = createRequire(import.meta.url);
+var pty = null;
+try {
+  pty = requireFn("node-pty");
+} catch (e) {
+  console.warn("node-pty not available; terminal features disabled:", e?.message);
+}
 function connectTerminalWs(serverUrl, nodeId, token, onOpen) {
   const wsUrl = serverUrl.replace(/^http/, "ws").replace(/\/$/, "") + `/ws/agent?token=${encodeURIComponent(token)}&nodeId=${encodeURIComponent(nodeId)}`;
   const ws = new WebSocket(wsUrl);
@@ -38,6 +45,10 @@ function connectTerminalWs(serverUrl, nodeId, token, onOpen) {
     }
     if (msg.type === "open") {
       const { sessionId, cols, rows, workspaceId, cwd } = msg;
+      if (!pty) {
+        ws.send(JSON.stringify({ type: "error", sessionId, message: "node-pty not available on this VPS" }));
+        return;
+      }
       const shell = os2.platform() === "win32" ? "powershell.exe" : "bash";
       const term = pty.spawn(shell, [], {
         name: "xterm-256color",
@@ -127,7 +138,7 @@ var AgentClient = class {
 import os4 from "node:os";
 
 // ../agent/src/executor.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdirSync, readdirSync, statSync, existsSync } from "node:fs";
 import path2 from "node:path";
 import os3 from "node:os";
@@ -161,7 +172,7 @@ async function runCommand(ctx, payload, onLog) {
   const { command, args: args2 = [], cwd, env = {}, timeoutMs } = payload;
   const workdir = cwd ? safePath(ctx.workspaceRoot, cwd) : ctx.workspaceRoot;
   return new Promise((resolve) => {
-    const child = spawn2(command, args2, { cwd: workdir, env: { ...process.env, ...env }, shell: false });
+    const child = spawn(command, args2, { cwd: workdir, env: { ...process.env, ...env }, shell: false });
     let stdout = "";
     let stderr = "";
     const timer = timeoutMs ? setTimeout(() => {
@@ -198,7 +209,7 @@ function makeWorkspaceDir(name, id) {
 
 // ../agent/src/index.ts
 import { mkdirSync as mkdirSync2, rmSync as rmSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2 } from "node:fs";
-import { spawn as spawn3 } from "node:child_process";
+import { spawn as spawn2 } from "node:child_process";
 import path3 from "node:path";
 import { spawnSync as spawnSync2 } from "node:child_process";
 var args = process.argv.slice(2);
@@ -306,7 +317,7 @@ async function handleJob(client, cfg, job) {
         break;
       }
       case "start_process": {
-        const child = spawn3(payload.command, payload.args || [], { cwd: payload.cwd ? safePath(wsPath, payload.cwd) : wsPath, env: { ...process.env, ...payload.env || {} }, detached: true, stdio: "ignore" });
+        const child = spawn2(payload.command, payload.args || [], { cwd: payload.cwd ? safePath(wsPath, payload.cwd) : wsPath, env: { ...process.env, ...payload.env || {} }, detached: true, stdio: "ignore" });
         child.unref();
         const pid = child.pid;
         processes.set(pid, child);

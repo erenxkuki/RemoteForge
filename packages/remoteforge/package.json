@@ -17,7 +17,8 @@
     "agent.js",
     "skills",
     "README.md",
-    "install.sh"
+    "install.sh",
+    "install.ps1"
   ],
   "scripts": {
     "build": "node scripts/build.cjs",
