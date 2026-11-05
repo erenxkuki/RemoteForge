@@ -53,8 +53,22 @@ export async function runCommand(ctx: ExecContext, payload: any, onLog: (c: stri
   });
 }
 
+export function resolveWorkspacePath(workspaceId: string, name?: string): string {
+  const direct = path.join(WORKSPACE_BASE, workspaceId);
+  if (existsSync(direct)) return direct;
+  // legacy: name-id pattern
+  try {
+    const entries = readdirSync(WORKSPACE_BASE);
+    const match = entries.find((e) => e === workspaceId || e.endsWith("-" + workspaceId));
+    if (match) return path.join(WORKSPACE_BASE, match);
+  } catch {}
+  // create new with just id
+  mkdirSync(direct, { recursive: true });
+  return direct;
+}
+
 export function makeWorkspaceDir(name: string, id: string): string {
-  const dir = path.join(WORKSPACE_BASE, `${name}-${id}`);
+  const dir = path.join(WORKSPACE_BASE, id);
   mkdirSync(dir, { recursive: true });
   return dir;
 }

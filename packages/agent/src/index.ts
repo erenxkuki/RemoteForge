@@ -8,6 +8,7 @@ import {
   listFilesRecursive,
   runCommand,
   makeWorkspaceDir,
+  resolveWorkspacePath,
   WORKSPACE_BASE,
 } from "./executor.js";
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -71,7 +72,7 @@ async function handleJob(client: AgentClient, cfg: any, job: any): Promise<void>
   try {
     let result: any = {};
     const payload = job.payload || {};
-    const wsPath = (job.workspaceId ? path.join(WORKSPACE_BASE, job.workspaceId) : WORKSPACE_BASE);
+    const wsPath = (job.workspaceId ? resolveWorkspacePath(job.workspaceId, (job.payload as any)?.name) : WORKSPACE_BASE);
     // ensure base
     ensureDir(WORKSPACE_BASE);
 

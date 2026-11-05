@@ -220,8 +220,20 @@ async function runCommand(ctx, payload, onLog) {
     });
   });
 }
+function resolveWorkspacePath(workspaceId, name) {
+  const direct = path2.join(WORKSPACE_BASE, workspaceId);
+  if (existsSync(direct)) return direct;
+  try {
+    const entries = readdirSync(WORKSPACE_BASE);
+    const match = entries.find((e) => e === workspaceId || e.endsWith("-" + workspaceId));
+    if (match) return path2.join(WORKSPACE_BASE, match);
+  } catch {
+  }
+  mkdirSync(direct, { recursive: true });
+  return direct;
+}
 function makeWorkspaceDir(name, id) {
-  const dir = path2.join(WORKSPACE_BASE, `${name}-${id}`);
+  const dir = path2.join(WORKSPACE_BASE, id);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -285,7 +297,7 @@ async function handleJob(client, cfg, job) {
   try {
     let result = {};
     const payload = job.payload || {};
-    const wsPath = job.workspaceId ? path3.join(WORKSPACE_BASE, job.workspaceId) : WORKSPACE_BASE;
+    const wsPath = job.workspaceId ? resolveWorkspacePath(job.workspaceId, job.payload?.name) : WORKSPACE_BASE;
     ensureDir(WORKSPACE_BASE);
     switch (job.type) {
       case "create_workspace": {
